@@ -1232,6 +1232,47 @@ function LoginScreen({ onLogin, onSignup }) {
   );
 }
 
+function VerifyScreen({ user, onLogout }) {
+  const [sending, setSending] = uS(false);
+  const [sent, setSent] = uS(false);
+  const [checking, setChecking] = uS(false);
+
+  const resend = async () => {
+    setSending(true);
+    try { await user.sendEmailVerification(); setSent(true); }
+    catch(e) { console.error(e); }
+    setSending(false);
+  };
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      await user.reload();
+      if (firebase.auth().currentUser.emailVerified) {
+        window.location.reload();
+      }
+    } catch(e) {}
+    setChecking(false);
+  };
+
+  return h("div", { className: "login-wrap" },
+    h("div", { className: "login-box" },
+      h("h1", null, "📧 Verifique seu email"),
+      h("p", { className: "sub" }, "Enviamos um link de verificação para:"),
+      h("p", { style: { color: "#fbbf24", fontWeight: 700, fontSize: 15, margin: "8px 0 20px" } }, user.email),
+      h("p", { style: { color: "#94a3b8", fontSize: 13, lineHeight: 1.6, marginBottom: 20 } },
+        "Abra seu email, clique no link de verificação e depois volte aqui."),
+      h("button", { className: "btn-go", onClick: checkNow, disabled: checking },
+        checking ? "Verificando..." : "✅ Já verifiquei, entrar!"),
+      h("div", { className: "divider" }),
+      h("button", { className: "btn-alt", onClick: resend, disabled: sending, style: { marginBottom: 8 } },
+        sent ? "✓ Email reenviado!" : sending ? "Enviando..." : "📨 Reenviar email de verificação"),
+      h("button", { className: "btn-alt", onClick: onLogout },
+        "← Sair e trocar de conta")
+    )
+  );
+}
+
 function RootApp() {
   const [user, setUser] = uS(null);
   const [ready, setReady] = uS(false);
@@ -1245,7 +1286,11 @@ function RootApp() {
   }, []);
 
   const doLogin = (e, p) => firebase.auth().signInWithEmailAndPassword(e, p);
-  const doSignup = (e, p) => firebase.auth().createUserWithEmailAndPassword(e, p);
+  const doSignup = async (e, p) => {
+    const cred = await firebase.auth().createUserWithEmailAndPassword(e, p);
+    await cred.user.sendEmailVerification();
+    return cred;
+  };
   const doLogout = () => { firebase.auth().signOut(); window.__FIREBASE_USER__ = null; };
 
   if (!ready) {
@@ -1259,6 +1304,10 @@ function RootApp() {
 
   if (!user) {
     return h(LoginScreen, { onLogin: doLogin, onSignup: doSignup });
+  }
+
+  if (!user.emailVerified) {
+    return h(VerifyScreen, { user: user, onLogout: doLogout });
   }
 
   return h("div", null,
